@@ -1,0 +1,18 @@
+regression:
+
+  params:
+
+    metric: ['rmse', 'mape']
+    objective: "rmse"
+
+    learning_rate: 0.056
+    sub_feature: 1
+    sub_row: 0.67
+    bagging_freq: 5
+    lambda_l2: 0.00002
+    num_leaves: 176
+    max_depth: 251
+    min_data_in_leaf: 215
+
+  num_boost_round: 200
+  verbose_eval: -1
