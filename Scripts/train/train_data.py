@@ -1,6 +1,4 @@
-import base64
 import gc
-import hashlib
 import os
 import pickle
 import sys
@@ -8,12 +6,8 @@ import time
 import warnings
 
 import lightgbm as lgb
-# import dvc.api
-import neptune
 import pandas as pd
 import yaml
-from neptune.integrations.lightgbm import (NeptuneCallback,
-                                           create_booster_summary)
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # noqa: E402
 from assets.settings import (N_COUNTS_FOR_PRED,  # noqa: E402
@@ -43,10 +37,6 @@ verbose_eval = params['regression']['verbose_eval']
 
 models = {}
 
-run_type = 'hfwc_model_'
-hasher = hashlib.sha1(str(time.time()).encode("UTF-8"))
-run_type += base64.urlsafe_b64encode(hasher.digest()[:10]).decode("utf-8").rstrip('=')
-
 for week in range(1, N_COUNTS_FOR_PRED + 1):
 
     df = pd.read_parquet('Data/prepared/train/main_data.gzip')
@@ -74,25 +64,12 @@ for week in range(1, N_COUNTS_FOR_PRED + 1):
     train_data = lgb.Dataset(X_train, y_train, free_raw_data=False)
     test_data = lgb.Dataset(X_test, y_test, free_raw_data=False)
 
-    run = neptune.init_run(
-        api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI5NTJlYjRkNS04NWVmLTRlNzAtOThjOC1jNjA1ZDc0YzQ2ZGMifQ==',
-        project='johnorjohnny/Practice',
-    )
-
-    run["sys/tags"].add("High frequency weekly customers model")
-
-    neptune_callback = NeptuneCallback(run=run)
-
-    run['run_type'] = run_type
-    run['model_type'] = 'regression'
-
     lgbm_reg = lgb.train(
         lgbm_params,
         train_set=train_data,
         valid_sets=[train_data, test_data],
         num_boost_round=num_boost_round,
         verbose_eval=verbose_eval,
-        callbacks=[neptune_callback],
         categorical_feature=category_cols,
     )
 
@@ -101,32 +78,6 @@ for week in range(1, N_COUNTS_FOR_PRED + 1):
     metrics = regf.calculate_metrics(lgbm_reg, X_train, X_valid, y_train, y_valid)
 
     models[f'{week}_model'] = lgbm_reg
-
-    try:
-
-        run["lgbm_summary"] = create_booster_summary(
-            booster=lgbm_reg,
-            log_trees=True,
-            tree_figsize=60,
-            list_trees=[0, 1, 2, 3, 4],
-        )
-
-    except Exception:
-
-        pass
-
-    try:
-
-        run['valid_rmse'].append(metrics['valid']['RMSE'])
-        run['valid_r2'].append(metrics['valid']['R2'])
-        run['valid_wape'].append(metrics['valid']['wape'])
-        run['train_r2'].append(metrics['train']['R2'])
-        run['train_wape'].append(metrics['train']['wape'])
-
-    except Exception:
-        pass
-
-    run.stop()
 
     del X_train, X_test, X_valid, y_train, y_test, y_valid, train_data, test_data
 
